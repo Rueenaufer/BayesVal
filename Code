@@ -32,7 +32,7 @@ BPS1 <- BPS0 + EPS1 - DPS1
 BPS2 <- BPS1 + EPS2 - DPS2
 BPSs <- cbind(BPS0, BPS1, BPS2)
 
-# Calculate Expected ROEs and EPS/DPS Vectors
+# Calculate ROEs and EPS/DPS Vectors
 
 ROE1 <- EPS1/BPS0
 ROE2 <- EPS2/BPS1
@@ -42,7 +42,7 @@ n = length(ROEs)
 EPSs <- cbind(EPS1, EPS2, EPS3)
 DPSs <- cbind(DPS1, DPS2, DPS3)
 
-# Calculate Expected Payout Ratios
+# Calculate Payout Ratios
 
 k1 <- DPS1/EPS1
 k2 <- DPS2/EPS2
