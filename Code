@@ -1,11 +1,6 @@
 library(readxl)
 library(writexl)
-library(pastecs) 
-library(plm)
-library(lmtest)
-library(sandwich)
-library(lmtest)
-library(descr)
+
 
 rm(list = ls())
 
