@@ -1,6 +1,8 @@
 library(readxl)
 library(writexl)
-
+library(bayestestR)
+library(ggplot2)
+library(dplyr)
 
 rm(list = ls())
 
@@ -24,7 +26,7 @@ MRP <- 0.06
 
 # Samples & Prob Threshold
 
-samples = 100000
+samples = 1000000
 z = (0.1)^(35)
 
 # Generate Book Values through Clean-Surplus-Accounting
@@ -32,7 +34,7 @@ BPS1 <- BPS0 + EPS1 - DPS1
 BPS2 <- BPS1 + EPS2 - DPS2
 BPSs <- cbind(BPS0, BPS1, BPS2)
 
-# Calculate ROEs and EPS/DPS Vectors
+# Calculate Expected ROEs and EPS/DPS Vectors
 
 ROE1 <- EPS1/BPS0
 ROE2 <- EPS2/BPS1
@@ -42,7 +44,7 @@ n = length(ROEs)
 EPSs <- cbind(EPS1, EPS2, EPS3)
 DPSs <- cbind(DPS1, DPS2, DPS3)
 
-# Calculate Payout Ratios
+# Calculate Expected Payout Ratios
 
 k1 <- DPS1/EPS1
 k2 <- DPS2/EPS2
@@ -121,13 +123,14 @@ kLPO <- rnorm(samples, mean = kPO, sd = s2kPO^(1/2))
 # Feasible Interval (0, rLPO/(1-kLPO))
 # Prior
 # Draws from the Posterior of rL
-ROEPR <- rLPO
+ROEPR <- data.frame(rLPO)
 
 # Upper boundary for ROEL depends on the draws rL & kL
-ROEUP <- (rLPO/(1-kLPO))-rLPO
+ROEUP <- data.frame((rLPO/(1-kLPO))-rLPO)
 ROELdiff <- data.frame(pmin(ROEPR, ROEUP))
 #Calculate Variance per Draw
 s2ROEPR <- ((ROELdiff)/zCV)^2
+sROEPR <- s2ROEPR^0.5
 
 
 # Likelihood of ROEL
@@ -149,8 +152,15 @@ res <- matrix(nrow=samples, ncol=1)
 for(j in seq_len(samples)){
  res[j,1] <- rnorm(1, ROEPO[j,1], sROEPO[j,1])}
 
+# Sample from Priors
+
+resPR <- matrix(nrow=samples, ncol=1)
+
+for(j in seq_len(samples)){
+  resPR[j,1] <- rnorm(1, ROEPR[j,1], sROEPR[j,1])}
+
 # Create Prior, Likelihood and Posterior for ROEL
-ROELPR <- ROEPR
+ROELPR <- resPR
 ROELLI <- rnorm(samples, ROELI, sqrt(s2ROELI))
 ROELPO <- res
 
@@ -158,13 +168,6 @@ ROELPO <- res
 ### Calculation of Intrinsic Value ----
 
 BPS0s <- replicate(samples, BPS0)
-BPS1s <- replicate(samples, BPS1)
-BPS2s <- replicate(samples, BPS2)
-ROE1s <- replicate(samples, ROE1)
-ROE2s <- replicate(samples, ROE2)
-ROE3s <- replicate(samples, ROE3)
-
-# Prior
 
 IVPR <- BPS0s + BPS0s*(ROELPR - rLPR)/(rLPR-ROELPR*(1-kLPR))
 IVLI <- BPS0s + BPS0s*(ROELLI - rLLI)/(rLLI-ROELLI*(1-kLLI))
@@ -173,46 +176,77 @@ IVPO <- BPS0s + BPS0s*(ROELPO - rLPO)/(rLPO-ROELPO*(1-kLPO))
 
 ### Plots -----
 
-par(mfrow = c(1,1), lwd = 3, family = "serif")
+par(mfrow = c(1,1), lwd = 2, family = "serif")
 
-plot(density(rLPO), main = "Prior, Likelihood and Posterior Density of the Cost of Capital", lty = 1, xlab = "Cost of Equity in %", xlim = c(0,max(rLPO)))
+### Prior, Likelihood and Posterior Density of the Cost of Capital
+
+rLCI <- ci(rLPO, ci = 0.89,  method = "ETI")
+plot(density(rLPO), lty = 1, main = "", xlab = "Cost of Equity Capital", xlim = c(0,max(rLPO)))
 lines(density(rLPR), lty = 2)
 lines(density(rLLI), lty = 3)
-legend(x = "topright",
+legend(x = "topleft",
        legend = c("Prior", "Likelihood", "Posterior"),
        lty = c(2,3,1))
+abline(v=rLCI$CI_low, lty = 1, lwd = 1)
+abline(v=rLCI$CI_high, lty = 1, lwd = 1)
 
+### Prior, Likelihood and Posterior Density of the Long-Term Payout Ratio
 
-plot(density(kLPO), main = "Prior, Likelihood and Posterior Density of the Long-Term Payout Ratio", lty = 1, xlab = "Payout Ratio in %", xlim = c(0,1))
+kLCI <- ci(kLPO, ci = 0.89,  method = "ETI")
+plot(density(kLPO), main = "", lty = 1, xlab = "Payout Ratio", xlim = c(0,1))
 lines(density(kLPR), lty = 2)
 lines(density(kLLI), lty = 3)
 legend(x = "topright",
        legend = c("Prior", "Likelihood", "Posterior"),
        lty = c(2,3,1))
+abline(v=kLCI$CI_low, lty = 1, lwd = 1)
+abline(v=kLCI$CI_high, lty = 1, lwd = 1)
 
-plot(density(ROELPO), main = "Prior, Likelihood and Posterior Density of the Long-Term ROE", lty = 1, xlab = "Return on Equity in %", xlim = c(0, max(ROELPO)))
+### Prior, Likelihood and Posterior Density of the Long-Term Return on Equity
+
+ROELCI <- ci(ROELPO, ci = 0.89,  method = "ETI")
+plot(density(ROELPO), main = "", lty = 1, xlab = "Return on Equity", xlim = c(0, max(rLPO/(1-kLPO))))
 lines(density(ROELPR), lty = 2)
 lines(density(ROELLI), lty = 3)
 legend(x = "topright",
        legend = c("Prior", "Likelihood", "Posterior"),
        lty = c(2,3,1))
+abline(v=ROELCI$CI_low, lty = 1, lwd = 1)
+abline(v=ROELCI$CI_high, lty = 1, lwd = 1)
 
 
-plot(density(IVPO), main = "Prior, Likelihood and Posterior Density of Intrinsic Value", lty = 1, xlab = "Intrinsic Value in €", xlim = c(0, max(IVPO)))
+### Mean & Variance of the Simulated Prior + Posterior
+
+mROEPR <- mean(ROELPR)
+sdROEPR <- sd(ROELPR)
+mROEPR
+sdROEPR
+
+mROELI <- ROELI
+sdROELI <- s2ROELI^0.5
+mROELI
+sdROELI
+
+
+mROEPO <- mean(ROELPO)
+sdROEPO <- sd(ROELPO)
+mROEPO
+sdROEPO
+
+### Prior, Likelihood and Posterior Density of Intrinsic Value
+IVCI <- ci(IVPO, ci = 0.89,  method = "ETI")
+plot(density(IVPO), main = "", lty = 1, xlab = "Intrinsic Value in €", xlim = c(0, max(IVPO)))
 lines(density(IVPR), lty = 2)
 lines(density(IVLI), lty = 3)
-abline(v=P0, lty = 4)
+#abline(v=P0, lty = 4)
 legend(x = "topright",
        legend = c("Prior", "Likelihood", "Posterior", "Price"),
        lty = c(2,3,1,4))
-### Input Tables ----
-
-BPST <- cbind(BPSs,"")
-EPST <- cbind("", EPSs)
-DPST <- cbind("", DPSs)
-Fund <- as.numeric(rbind(BPST,EPST,DPST))
-Fundamentals <- as.data.frame(rbind(BPST,EPST,DPST), row.names=c("BPS", "EPS", "DPS"), col.names = c("0","1","2","3"))
+abline(v=IVCI$CI_low, lty = 1, lwd = 1)
+abline(v=IVCI$CI_high, lty = 1, lwd = 1)
 
 
-### Output Tables ----
-# Priors, Likelihood and Posteriors
+
+
+
+
