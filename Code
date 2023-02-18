@@ -1,249 +1,206 @@
-library(readxl)
-library(writexl)
-library(bayestestR)
-library(ggplot2)
-library(dplyr)
+par(family="serif")
 
-rm(list = ls())
+bps0 = 259.35
+pps0 = 120.48
+v = c(1, 1.077, 1.052, 1.04, 1.947, 1.374, 1.212, 2.382, 1.535, 1.298, 3.69, 2.017, 1.557)
+v = v*1
+n = length(v) #### Number of Observations
+samples = 1000000 #### number of data points for densities
 
- # Fundamentals (as of 11th February 2022) -----
-BPS0 <- 222.09
-EPS0 <- 16.60
-EPS1 <- 27.95
-EPS2 <- 31.34
-EPS3 <- 26.28
-DPS0 <- 4.86
-DPS1 <- 7.56
-DPS2 <- 8.91
-DPS3 <- 9.89
-P0 <- 188.90
+iter = 10000 ##### Metropolis Hastings Iterations
+pred = iter #### number of data points for prior and posterior checks
+burnin = 1000 ### Burn-In to Discard
+par(mfrow = c(1,1))
 
-# Return Data
-ri <- c(0.05,-0.02,0.03,0.01,0.03,-0.03, 0.012,-0.003, 0.04,-0.02)
-rm <- c(0.03, 0.04,-0.05, 0.04,-0.05,0.05, 0.04, -0.001,0.002, 0.03)
-rf <- 0.01
-MRP <- 0.06
-
-# Samples & Prob Threshold
-
-samples = 1000000
-z = (0.1)^(35)
-
-# Generate Book Values through Clean-Surplus-Accounting
-BPS1 <- BPS0 + EPS1 - DPS1
-BPS2 <- BPS1 + EPS2 - DPS2
-BPSs <- cbind(BPS0, BPS1, BPS2)
-
-# Calculate Expected ROEs and EPS/DPS Vectors
-
-ROE1 <- EPS1/BPS0
-ROE2 <- EPS2/BPS1
-ROE3 <- EPS3/BPS2
-ROEs <- c(ROE1, ROE2, ROE3)
-n = length(ROEs)
-EPSs <- cbind(EPS1, EPS2, EPS3)
-DPSs <- cbind(DPS1, DPS2, DPS3)
-
-# Calculate Expected Payout Ratios
-
-k1 <- DPS1/EPS1
-k2 <- DPS2/EPS2
-k3 <- DPS3/EPS3
-ks <- c(k1, k2, k3)
-
-### Cost of Equity Capital Estimate (rL, based on Vasicek 1972) ### -----
-
-# Feasible Interval (0,infinity)
-
-# Prior Information for Means + Variance for Mean Updating of rL
-
-BPR <- 1
-zCV = -qnorm(z)
-s2BPR <- ((BPR)/zCV)^2
-
-# Obtain OLS-Beta and Standard Error
-
-rOLS <- lm(ri ~ rm)
-
-rOLS<- summary(rOLS)
-
-# Likelihood Function for Beta
+### Prior Calibrations
 
 
-BLI  <- rOLS$coefficients[2,1]
-s2BLI <- rOLS$coefficients[2,2]^2
+# Normal
+muprn <- 1
+sdprn <- 0.1
+
+# Uniform 
+minprn = -1
+maxprn = 3
+
+# Chisquared
+
+kprn = 3
+
+# Gamma
+
+aprn = 5
+bprn = 4
+
+# Proposal Function Calibrations
+
+mupro = 0
+sdpro = 1
+
+### Normal Model (Closed Form, Variance known)
+
+### Likelihood
+
+mulin <- mean(v)
+sdlin2 <- var(v)
+sdlin <- sqrt(sdlin2)
+
+### Posterior
+
+sdpon2 <- 1/(n/sdlin2+1/sdprn^2)
+mupon <- sdpon2*(muprn/sdprn^2+n*mulin/sdlin2)
+sdpon = sdpon2^0.5
+
+### Plots
+
+plot(density(rnorm(samples,mean=mupon, sd = sdpon)), xlim = c(0,2))
+lines(density(rnorm(samples,mean=muprn, sd = sdprn)), lty = 2)
+lines(density(rnorm(samples,mean=mulin, sd = sdlin)), lty = 3)
 
 
-# Posterior Estimate for Beta
+### Normal  Model (MH Algorithm)
 
-BPO <- (BPR/s2BPR+BLI/s2BLI)/(1/s2BPR+1/s2BLI)
-s2BPO <- 1/(1/s2BPR+1/s2BLI)
 
-# Obtain Distributions or Cost of Equity Capital
-
-# Prior
-rPR <- rf + BPR*MRP
-s2rPR <- s2BPR*MRP^2
 # Likelihood
-rLI <- rf + BLI*MRP
-s2rLI <- s2BLI*MRP^2
-# Posterior
-rPO <- rf + BPO*MRP
-s2rPO <- s2BPO*MRP^2
 
-# Sample from Prior, Likelihood and Posterior of the Cost of Capital
+likelihood = function(mu){
+  sll <- dnorm(v, mean=mu, sd = sdlin, log = T)
+  sumll <- sum(sll)
+  return(sumll)
+}
 
-rLPR <- rnorm(samples, mean = rPR, sd = s2rPR^(1/2))
-rLLI <- rnorm(samples, mean = rLI, sd = s2rLI^(1/2))
-rLPO <- rnorm(samples, mean = rPO, sd = s2rPO^(1/2))
+# plot likelihood function
 
-### Long-Term Payout Ratio Estimate (kL) ###
+slopevalues = function(mu){
+  return(likelihood(mu))}
+slopelikelihoods = lapply(seq(0, 3, by=.05), slopevalues)
+plot (seq(0, 3, by=.05), slopelikelihoods , type="l", xlab = "??", ylab = "Log Likelihood")
+abline(v=mulin, lty=4)
 
-# Feasible Interval (0,1)
 
+# Priors
+
+
+Priortype = "Histogram and Densities"
+
+
+# Uniform Prior
+
+#prior = function (mu){
+#  dunif(mu ,min=minprn, max=maxprn, log = T)
+#} 
+
+# Normal Prior
+
+#prior = function (mu){
+#dnorm(mu, mean = muprn, sd = sdprn, log = T)
+#} 
+
+# Gamma Prior
+
+
+#prior = function (mu){
+#  dgamma(mu, aprn, bprn, log = T)
+#  
+#} 
+
+# Chi-Squared Prior
+
+
+prior = function (mu){
+  muprior <- dchisq(mu, kprn, log = T)
+  return(muprior)
+} 
+
+# posterior to sample from
+
+target = function(mu){
+  return(likelihood(mu) + prior(mu))
+}
+
+# MH algorithm
+
+mu = rep(0,iter)
+mu[1] = 0.5   
+for(i in 2:iter){
+  cur_mu = mu[i-1]
+  prop_mu = cur_mu + rnorm(1,mean=mupro,sd=sdpro)
+  A = exp(target(prop_mu)-target(cur_mu)) 
+  if(runif(1)<A){
+    mu[i] = prop_mu     
+  } else {
+    mu[i] = cur_mu     
+  }
+}
+
+
+# prior and likelihood densities
+
+densprn=density(rchisq(samples, kprn))
+denslin=density(rnorm(samples, mean=mulin, sd=sdlin ))
+
+
+
+### Calculate posterior probability of v > p
+
+par(mfrow = c(2,1))
+
+vmu <- mu
+hist(vmu, breaks=40, freq=FALSE, xlab = "V/B", xlim = c(0,3), ylim=c(0,5), main = Priortype)
+legend(x = "topright",
+       legend = c("Prior", "Likelihood", "Posterior"),
+       lty = c(3,2,1))
+
+
+lines(density(vmu))
+lines(denslin, lty=2)
+lines(densprn, lty=3)
+abline(v=pps0/bps0, lty = 4)
+
+simmupon = mean(mu)
+simsdpon = sd(mu)
+
+## Trace plot
+
+plot(mu, type = "l", xlab = "Iteration", ylab ="??", main = "Traceplot for ??")
+abline(v=burnin, lty=2)
+
+min(vmu)
+max(vmu)
+
+# Prior and Posterior predictive checks
 # Prior
-kPR <- 0.5
-kdiff= min(c(kPR,1-kPR))
-s2kPR <- ((kdiff)/zCV)^2
-# Likelihood
-kLI <- mean(ks)
-s2kLI <- ifelse(sd(ks)^2 == 0, s2kPR, sd(ks)^2)
+
+# Step 1: Sample from prior
+# Step 2: Sample from likelihood using the sample from posterior
+
+
+#priopred = 1
+#prio = 1
+#for(i in 1:iter){
+#  prio[i] = rnorm(1,muprn, sdprn, log = T)
+#  priopred[i] = rnorm(1,prio[i], sdlin, log = T)
+#  
+#}
+
+#plot(density(priopred))
+
+
+
 # Posterior
-s2kPO <- 1/(1/s2kPR+n/s2kLI)
-kPO <- s2kPO*(kPR/s2kPR+n*kLI/s2kLI)
 
-# Sample from Prior, Likelihood and Posterior of the Long-Term Payout Ratio ----
+par(mfrow = c(1,1))
 
-kLPR <- rnorm(samples, mean = kPR, sd = s2kPR^(1/2))
-kLLI <- rnorm(samples, mean = kLI, sd = s2kLI^(1/2))
-kLPO <- rnorm(samples, mean = kPO, sd = s2kPO^(1/2))
-
-### Long-Term ROE Estimate (ROEL) ----
-
-# Feasible Interval (0, rLPO/(1-kLPO))
-# Prior
-# Draws from the Posterior of rL
-ROEPR <- data.frame(rLPO)
-
-# Upper boundary for ROEL depends on the draws rL & kL
-ROEUP <- data.frame((rLPO/(1-kLPO))-rLPO)
-ROELdiff <- data.frame(pmin(ROEPR, ROEUP))
-#Calculate Variance per Draw
-s2ROEPR <- ((ROELdiff)/zCV)^2
-sROEPR <- s2ROEPR^0.5
+postpred = 0
+post = mu
+for(i in 1:iter){
+  postpred[i] = rnorm(1,post[i], sdlin)
+}
+hist(postpred, freq=FALSE, main = "Posterior Predictive Histogram & Density", xlab = "VB*")
+lines(density(postpred))
 
 
-# Likelihood of ROEL
 
-ROELI <- mean(ROEs)
-s2ROELI <- ifelse(sd(ROEs)^2 == 0, s2ROEPR, sd(ROEs)^2)
-
-
-# Posterior 
-
-s2ROEPO <- 1/(n/s2ROELI+1/s2ROEPR)
-ROEPO <- s2ROEPO*(n*ROELI/s2ROELI+ROEPR/s2ROEPR)
-sROEPO <- s2ROEPO^(1/2)
-
-# Sample from Posteriors
-
-res <- matrix(nrow=samples, ncol=1)
-
-for(j in seq_len(samples)){
- res[j,1] <- rnorm(1, ROEPO[j,1], sROEPO[j,1])}
-
-# Sample from Priors
-
-resPR <- matrix(nrow=samples, ncol=1)
-
-for(j in seq_len(samples)){
-  resPR[j,1] <- rnorm(1, ROEPR[j,1], sROEPR[j,1])}
-
-# Create Prior, Likelihood and Posterior for ROEL
-ROELPR <- resPR
-ROELLI <- rnorm(samples, ROELI, sqrt(s2ROELI))
-ROELPO <- res
-
-
-### Calculation of Intrinsic Value ----
-
-BPS0s <- replicate(samples, BPS0)
-
-IVPR <- BPS0s + BPS0s*(ROELPR - rLPR)/(rLPR-ROELPR*(1-kLPR))
-IVLI <- BPS0s + BPS0s*(ROELLI - rLLI)/(rLLI-ROELLI*(1-kLLI))
-IVPO <- BPS0s + BPS0s*(ROELPO - rLPO)/(rLPO-ROELPO*(1-kLPO))
-
-
-### Plots -----
-
-par(mfrow = c(1,1), lwd = 2, family = "serif")
-
-### Prior, Likelihood and Posterior Density of the Cost of Capital
-
-rLCI <- ci(rLPO, ci = 0.89,  method = "ETI")
-plot(density(rLPO), lty = 1, main = "", xlab = "Cost of Equity Capital", xlim = c(0,max(rLPO)))
-lines(density(rLPR), lty = 2)
-lines(density(rLLI), lty = 3)
-legend(x = "topleft",
-       legend = c("Prior", "Likelihood", "Posterior"),
-       lty = c(2,3,1))
-abline(v=rLCI$CI_low, lty = 1, lwd = 1)
-abline(v=rLCI$CI_high, lty = 1, lwd = 1)
-
-### Prior, Likelihood and Posterior Density of the Long-Term Payout Ratio
-
-kLCI <- ci(kLPO, ci = 0.89,  method = "ETI")
-plot(density(kLPO), main = "", lty = 1, xlab = "Payout Ratio", xlim = c(0,1))
-lines(density(kLPR), lty = 2)
-lines(density(kLLI), lty = 3)
-legend(x = "topright",
-       legend = c("Prior", "Likelihood", "Posterior"),
-       lty = c(2,3,1))
-abline(v=kLCI$CI_low, lty = 1, lwd = 1)
-abline(v=kLCI$CI_high, lty = 1, lwd = 1)
-
-### Prior, Likelihood and Posterior Density of the Long-Term Return on Equity
-
-ROELCI <- ci(ROELPO, ci = 0.89,  method = "ETI")
-plot(density(ROELPO), main = "", lty = 1, xlab = "Return on Equity", xlim = c(0, max(rLPO/(1-kLPO))))
-lines(density(ROELPR), lty = 2)
-lines(density(ROELLI), lty = 3)
-legend(x = "topright",
-       legend = c("Prior", "Likelihood", "Posterior"),
-       lty = c(2,3,1))
-abline(v=ROELCI$CI_low, lty = 1, lwd = 1)
-abline(v=ROELCI$CI_high, lty = 1, lwd = 1)
-
-
-### Mean & Variance of the Simulated Prior + Posterior
-
-mROEPR <- mean(ROELPR)
-sdROEPR <- sd(ROELPR)
-mROEPR
-sdROEPR
-
-mROELI <- ROELI
-sdROELI <- s2ROELI^0.5
-mROELI
-sdROELI
-
-
-mROEPO <- mean(ROELPO)
-sdROEPO <- sd(ROELPO)
-mROEPO
-sdROEPO
-
-### Prior, Likelihood and Posterior Density of Intrinsic Value
-IVCI <- ci(IVPO, ci = 0.89,  method = "ETI")
-plot(density(IVPO), main = "", lty = 1, xlab = "Intrinsic Value in €", xlim = c(0, max(IVPO)))
-lines(density(IVPR), lty = 2)
-lines(density(IVLI), lty = 3)
-#abline(v=P0, lty = 4)
-legend(x = "topright",
-       legend = c("Prior", "Likelihood", "Posterior", "Price"),
-       lty = c(2,3,1,4))
-abline(v=IVCI$CI_low, lty = 1, lwd = 1)
-abline(v=IVCI$CI_high, lty = 1, lwd = 1)
 
 
 
