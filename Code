@@ -1,116 +1,65 @@
 par(family="serif")
 
 bps0 = 259.35
-pps0 = 120.48
-v = c(1, 1.077, 1.052, 1.04, 1.947, 1.374, 1.212, 2.382, 1.535, 1.298, 3.69, 2.017, 1.557)
-v = v*1
+#pps0 = 120.48
+pps0 = 534
+v = c(1, 1.077, 1.052, 1.04, 1.947, 1.374, 1.212, 2.382, 1.535, 1.298, 3.686, 2.017, 1.556)
+mult= 1
+v = v*mult
 n = length(v) #### Number of Observations
 samples = 1000000 #### number of data points for densities
 
-iter = 10000 ##### Metropolis Hastings Iterations
+iter = 100000 ##### Metropolis Hastings Iterations
 pred = iter #### number of data points for prior and posterior checks
-burnin = 1000 ### Burn-In to Discard
+burnin = 2000 ### Burn-In to Discard
 par(mfrow = c(1,1))
+
 
 ### Prior Calibrations
 
+# Chisq
 
-# Normal
-muprn <- 1
-sdprn <- 0.1
-
-# Uniform 
-minprn = -1
-maxprn = 3
-
-# Chisquared
-
-kprn = 3
-
-# Gamma
-
-aprn = 5
-bprn = 4
-
-# Proposal Function Calibrations
-
-mupro = 0
-sdpro = 1
-
-### Normal Model (Closed Form, Variance known)
-
-### Likelihood
-
-mulin <- mean(v)
-sdlin2 <- var(v)
-sdlin <- sqrt(sdlin2)
-
-### Posterior
-
-sdpon2 <- 1/(n/sdlin2+1/sdprn^2)
-mupon <- sdpon2*(muprn/sdprn^2+n*mulin/sdlin2)
-sdpon = sdpon2^0.5
-
-### Plots
-
-plot(density(rnorm(samples,mean=mupon, sd = sdpon)), xlim = c(0,2))
-lines(density(rnorm(samples,mean=muprn, sd = sdprn)), lty = 2)
-lines(density(rnorm(samples,mean=mulin, sd = sdlin)), lty = 3)
+muprn = 5
 
 
-### Normal  Model (MH Algorithm)
 
+
+
+
+### Model (MH Algorithm)
 
 # Likelihood
 
 likelihood = function(mu){
-  sll <- dnorm(v, mean=mu, sd = sdlin, log = T)
+  sll <- dchisq(v, mu, log = T)
   sumll <- sum(sll)
   return(sumll)
 }
 
 # plot likelihood function
 
-slopevalues = function(mu){
+likevalues = function(mu){
   return(likelihood(mu))}
-slopelikelihoods = lapply(seq(0, 3, by=.05), slopevalues)
-plot (seq(0, 3, by=.05), slopelikelihoods , type="l", xlab = "??", ylab = "Log Likelihood")
-abline(v=mulin, lty=4)
+likelihoodval = lapply(seq(0.01, 5*mult, by=.01), likevalues)
+lik = as.data.frame(likelihoodval, col.names =seq(0.01, 5*mult, by=0.01))
+mlemu <- colnames(lik)[apply(lik,1,which.max)]
+mlemu = as.double(gsub("X","",mlemu))
+plot (seq(0.01, 5*mult, by=.01), likelihoodval , type="l", xlab = "??", ylab = "Log Likelihood")
+abline(v=mlemu, lty = 2)
 
 
-# Priors
+# Proposal Function Calibrations
+
+mupro = 0
+sdpro = 0.1
 
 
-Priortype = "Histogram and Densities"
-
-
-# Uniform Prior
-
-#prior = function (mu){
-#  dunif(mu ,min=minprn, max=maxprn, log = T)
-#} 
-
-# Normal Prior
-
-#prior = function (mu){
-#dnorm(mu, mean = muprn, sd = sdprn, log = T)
-#} 
-
-# Gamma Prior
-
-
-#prior = function (mu){
-#  dgamma(mu, aprn, bprn, log = T)
-#  
-#} 
-
-# Chi-Squared Prior
-
+# Prior
 
 prior = function (mu){
-  muprior <- dchisq(mu, kprn, log = T)
-  return(muprior)
+  dchisq(mu, muprn, log = T)
 } 
+
 
 # posterior to sample from
 
@@ -121,10 +70,10 @@ target = function(mu){
 # MH algorithm
 
 mu = rep(0,iter)
-mu[1] = 0.5   
+mu[1] = 3   
 for(i in 2:iter){
   cur_mu = mu[i-1]
-  prop_mu = cur_mu + rnorm(1,mean=mupro,sd=sdpro)
+  prop_mu = cur_mu + rnorm(1, mean=mupro,sd=sdpro)
   A = exp(target(prop_mu)-target(cur_mu)) 
   if(runif(1)<A){
     mu[i] = prop_mu     
@@ -133,32 +82,27 @@ for(i in 2:iter){
   }
 }
 
+# densities of prior and likelihood
 
-# prior and likelihood densities
+priorsim = rchisq(samples, muprn)
+liksim = rchisq(samples, mlemu)
 
-densprn=density(rchisq(samples, kprn))
-denslin=density(rnorm(samples, mean=mulin, sd=sdlin ))
-
-
+densprn=density(priorsim)
+denslin=density(liksim)
 
 ### Calculate posterior probability of v > p
 
 par(mfrow = c(2,1))
 
 vmu <- mu
-hist(vmu, breaks=40, freq=FALSE, xlab = "V/B", xlim = c(0,3), ylim=c(0,5), main = Priortype)
+hist(vmu, breaks=40, freq=FALSE, xlab = "??", xlim = c(0,5*mult), main = "Histogram and Densities")
 legend(x = "topright",
        legend = c("Prior", "Likelihood", "Posterior"),
        lty = c(3,2,1))
-
-
-lines(density(vmu))
+lines(density(mu))
 lines(denslin, lty=2)
 lines(densprn, lty=3)
-abline(v=pps0/bps0, lty = 4)
 
-simmupon = mean(mu)
-simsdpon = sd(mu)
 
 ## Trace plot
 
@@ -171,33 +115,51 @@ max(vmu)
 # Prior and Posterior predictive checks
 # Prior
 
-# Step 1: Sample from prior
-# Step 2: Sample from likelihood using the sample from posterior
+# Step 1: Sample from prior/posterior
+# Step 2: Sample from likelihood using the sample from prior/posterior
 
+par(mfrow = c(1,1))
 
-#priopred = 1
-#prio = 1
-#for(i in 1:iter){
-#  prio[i] = rnorm(1,muprn, sdprn, log = T)
-#  priopred[i] = rnorm(1,prio[i], sdlin, log = T)
-#  
-#}
-
-#plot(density(priopred))
-
+priopred = 1
+prio = 1
+for(i in 1:iter){
+  prio[i] = rchisq(1,muprn)
+  priopred[i] = rchisq(1,prio[i])
+  
+}
+hist(priopred, freq=FALSE, main = "Prior Predictive Histogram and Density", xlab = "VB'", xlim=c(0,15), breaks=100)
+axis(side=1, at=seq(0,15, by =1))
+lines(density(priopred, from = 0), lwd =2)
+abline(v=pps0/bps0, lty = 2, lwd = 2)
+legend(x = "topright",
+       legend = c("Density", "Price"),
+       lty = c(1,2))
 
 
 # Posterior
 
-par(mfrow = c(1,1))
 
 postpred = 0
 post = mu
 for(i in 1:iter){
-  postpred[i] = rnorm(1,post[i], sdlin)
+  postpred[i] = rchisq(1, post[i])
 }
-hist(postpred, freq=FALSE, main = "Posterior Predictive Histogram & Density", xlab = "VB*")
-lines(density(postpred))
+hist(postpred, freq=FALSE, main = "Posterior Predictive Histogram and Density", xlim=c(0,15), xlab = "VB*", breaks=100)
+axis(side=1, at=seq(0,15, by =1))
+lines(density(postpred, from = 0), lwd =2)
+abline(v=pps0/bps0, lty = 2, lwd = 2)
+legend(x = "topright",
+       legend = c("Density", "Price"),
+       lty = c(1,2))
+
+# prior and posterior predictive for V
+
+priopredv = priopred*bps0
+postpredv = postpred*bps0
+
+
+IVPRPROB <- sum(priopredv>pps0)/iter
+IVPOPROB <- sum(postpredv>pps0)/iter
 
 
 
